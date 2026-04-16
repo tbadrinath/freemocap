@@ -8,6 +8,4 @@ include bin/*
 include assets*
 include *.md
 
-# If including data files in the package, add them like:
-# include path/to/data_file
-
+recursive-include freemocap/web_api/static *

@@ -89,6 +89,11 @@ dynamic = ["version", "description"]
 
 [project.optional-dependencies]
 dev = ["black", "bumpver", "isort", "pip-tools", "pytest", "pytest-cov", "flit", "flake8", "flake8-bugbear", "flake8-bandit"]
+web = [
+    "fastapi>=0.115.6",
+    "uvicorn[standard]>=0.34.0",
+    "python-multipart>=0.0.22",
+]
 
 [project.packages]
 freemocap = { include = ["assets"] }
@@ -119,6 +124,7 @@ push = true
 
 [project.scripts]
 freemocap = "freemocap.__main__:main"
+freemocap-web = "freemocap.web_api.server:main"
 
 [tool.setuptools]
 py-modules = ["freemocap"]
