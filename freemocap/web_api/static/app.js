@@ -2,6 +2,7 @@
 'use strict';
 
 const API = '';  // same origin; update to 'http://<server-ip>:8000' if needed
+const PROCESS_API = `${API}/api/process`;
 
 // ── Toast notification ───────────────────────────────────────────────────────
 let _toastTimer = null;
@@ -106,7 +107,7 @@ async function loadRecordings() {
 async function checkStatus(recordingId, btn) {
   btn.disabled = true;
   try {
-    const resp = await fetch(`${API}/api/process/${encodeURIComponent(recordingId)}`);
+    const resp = await fetch(`${PROCESS_API}/${encodeURIComponent(recordingId)}`);
     if (!resp.ok) throw new Error(resp.statusText);
     const data = await resp.json();
 
@@ -125,14 +126,31 @@ async function checkStatus(recordingId, btn) {
   }
 }
 
+// ── Polling registry – one interval per recording ─────────────────────────────
+const _pollIntervals = {};
+
+function _stopPolling(recordingId) {
+  if (_pollIntervals[recordingId] != null) {
+    clearInterval(_pollIntervals[recordingId]);
+    delete _pollIntervals[recordingId];
+  }
+}
+
+// Stop all polls on page unload to avoid memory leaks
+window.addEventListener('beforeunload', () => {
+  Object.keys(_pollIntervals).forEach(_stopPolling);
+});
+
 // ── Start processing ──────────────────────────────────────────────────────────
 async function startProcessing(recordingId, btn) {
   if (!confirm(`Start processing recording:\n${recordingId}?\n\nThis may take several minutes.`)) return;
 
   btn.disabled = true;
+  _stopPolling(recordingId);  // cancel any previous poll for this recording
+
   try {
     const resp = await fetch(
-      `${API}/api/process/${encodeURIComponent(recordingId)}`,
+      `${PROCESS_API}/${encodeURIComponent(recordingId)}`,
       { method: 'POST' }
     );
     const data = await resp.json();
@@ -144,12 +162,12 @@ async function startProcessing(recordingId, btn) {
     toast(`🚀 Processing started for ${recordingId}`, 4000);
 
     // Poll status every 5 s
-    const pollInterval = setInterval(async () => {
+    _pollIntervals[recordingId] = setInterval(async () => {
       try {
-        const sr = await fetch(`${API}/api/process/${encodeURIComponent(recordingId)}`);
+        const sr = await fetch(`${PROCESS_API}/${encodeURIComponent(recordingId)}`);
         const sd = await sr.json();
         if (sd.status === 'complete' || sd.status === 'failed') {
-          clearInterval(pollInterval);
+          _stopPolling(recordingId);
           btn.disabled = false;
           const msg = sd.status === 'complete'
             ? `✅ Processing complete for ${recordingId}`

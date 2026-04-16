@@ -16,10 +16,22 @@ _jobs: Dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 
 
+def _safe_recording_path(recording_id: str) -> Path:
+    """
+    Resolve the recording folder path and verify it stays within the sessions
+    root to prevent path-traversal attacks.
+
+    Raises ``HTTPException(400)`` if the resolved path escapes the root.
+    """
+    sessions_root = Path(get_recording_session_folder_path(create_folder=False)).resolve()
+    candidate = (sessions_root / recording_id).resolve()
+    if sessions_root not in candidate.parents and candidate != sessions_root:
+        raise HTTPException(status_code=400, detail="Invalid recording ID")
+    return candidate
+
+
 def _run_processing(recording_id: str, recording_path: Path, calibration_toml: Optional[str]) -> None:
     """Background thread that runs process_recording_headless."""
-    with _jobs_lock:
-        _jobs[recording_id] = {"status": "running", "error": None}
     try:
         from freemocap.core_processes.process_motion_capture_videos.process_recording_headless import (
             process_recording_headless,
@@ -50,14 +62,15 @@ def start_processing(recording_id: str, calibration_toml: Optional[str] = None):
     - ``calibration_toml`` (optional query param): absolute server-side path to
       the camera calibration TOML file.  Required for multi-camera recordings.
     """
-    sessions_root = Path(get_recording_session_folder_path(create_folder=False))
-    recording_path = sessions_root / recording_id
+    recording_path = _safe_recording_path(recording_id)
     if not recording_path.exists():
         raise HTTPException(status_code=404, detail=f"Recording '{recording_id}' not found")
 
     with _jobs_lock:
         if recording_id in _jobs and _jobs[recording_id]["status"] == "running":
             raise HTTPException(status_code=409, detail="Processing already in progress for this recording")
+        # Mark as running while still holding the lock to prevent TOCTOU race
+        _jobs[recording_id] = {"status": "running", "error": None}
 
     thread = threading.Thread(
         target=_run_processing,
