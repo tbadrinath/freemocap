@@ -1,4 +1,5 @@
 import logging
+import re
 import shutil
 import uuid
 from pathlib import Path
@@ -19,23 +20,34 @@ router = APIRouter(prefix="/recordings", tags=["recordings"])
 
 _ALLOWED_VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv"}
 
+# Only allow word chars, hyphens, dots, and forward-slashes (session/recording hierarchy)
+_SAFE_ID_RE = re.compile(r'^[\w][\w.\-]*(\/[\w][\w.\-]*)*$')
+
 
 def _sessions_root() -> Path:
     return Path(get_recording_session_folder_path(create_folder=True))
 
 
+def _validate_recording_id(recording_id: str) -> None:
+    """
+    Reject recording IDs that contain path-traversal sequences or absolute paths.
+
+    Raises ``HTTPException(400)`` for invalid IDs.
+    """
+    if not _SAFE_ID_RE.match(recording_id):
+        raise HTTPException(status_code=400, detail="Invalid recording ID")
+    for part in recording_id.split('/'):
+        if part in ('..', '.', ''):
+            raise HTTPException(status_code=400, detail="Invalid recording ID")
+
+
 def _safe_recording_path(recording_id: str) -> Path:
     """
-    Resolve the recording folder path and verify it stays within the sessions
-    root to prevent path-traversal attacks.
-
-    Raises ``HTTPException(400)`` if the resolved path escapes the root.
+    Validate ``recording_id`` then resolve its path within the sessions root.
     """
-    root = _sessions_root().resolve()
-    candidate = (root / recording_id).resolve()
-    if root not in candidate.parents and candidate != root:
-        raise HTTPException(status_code=400, detail="Invalid recording ID")
-    return candidate
+    _validate_recording_id(recording_id)
+    # Safe to join: recording_id has already been validated to contain no '..'
+    return _sessions_root() / recording_id
 
 
 def _list_recording_folders() -> List[Path]:
@@ -81,17 +93,18 @@ async def upload_videos(files: List[UploadFile] = File(...)):
 
     saved = []
     for upload in files:
-        # Derive a safe filename; fall back to a random UUID if none provided
+        # Extract only the base filename (strip any directory components) and get suffix
         original_name = upload.filename or ""
-        suffix = Path(original_name).suffix.lower() if original_name else ""
+        base_name = Path(original_name).name  # strips any directory components
+        suffix = Path(base_name).suffix.lower() if base_name else ""
         if suffix not in _ALLOWED_VIDEO_SUFFIXES:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported file type '{suffix or '(none)'}'. "
                        f"Accepted: {', '.join(sorted(_ALLOWED_VIDEO_SUFFIXES))}",
             )
-        # Use only the basename to avoid any directory components in the filename
-        safe_stem = Path(original_name).stem if original_name else str(uuid.uuid4())
+        # Build a safe destination filename using only the stem (or a uuid if no name)
+        safe_stem = Path(base_name).stem if base_name else str(uuid.uuid4())
         dest = videos_folder / f"{safe_stem}{suffix}"
         try:
             with dest.open("wb") as fh:

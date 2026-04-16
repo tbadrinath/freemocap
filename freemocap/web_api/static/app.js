@@ -164,14 +164,14 @@ async function startProcessing(recordingId, btn) {
     // Poll status every 5 s
     _pollIntervals[recordingId] = setInterval(async () => {
       try {
-        const sr = await fetch(`${PROCESS_API}/${encodeURIComponent(recordingId)}`);
-        const sd = await sr.json();
-        if (sd.status === 'complete' || sd.status === 'failed') {
+        const statusResponse = await fetch(`${PROCESS_API}/${encodeURIComponent(recordingId)}`);
+        const statusData = await statusResponse.json();
+        if (statusData.status === 'complete' || statusData.status === 'failed') {
           _stopPolling(recordingId);
           btn.disabled = false;
-          const msg = sd.status === 'complete'
+          const msg = statusData.status === 'complete'
             ? `✅ Processing complete for ${recordingId}`
-            : `❌ Processing failed for ${recordingId}: ${sd.error}`;
+            : `❌ Processing failed for ${recordingId}: ${statusData.error}`;
           toast(msg, 6000);
         }
       } catch (_) { /* ignore transient errors */ }
