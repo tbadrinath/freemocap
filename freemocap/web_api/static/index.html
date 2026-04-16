@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="description" content="FreeMoCap mobile companion – upload videos and run motion-capture processing from your Android browser." />
+  <link rel="manifest" href="/manifest.json" />
+  <title>FreeMoCap Web</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --primary: #0f3460;
+      --accent: #e94560;
+      --text: #eaeaea;
+      --muted: #888;
+      --radius: 8px;
+      --spacing: 1rem;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--surface);
+      padding: var(--spacing);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      border-bottom: 2px solid var(--accent);
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 700; }
+    header span { color: var(--accent); }
+
+    main {
+      flex: 1;
+      padding: var(--spacing);
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    section { margin-bottom: 2rem; }
+
+    h2 {
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: var(--spacing);
+    }
+
+    label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--muted); }
+
+    input[type="file"] {
+      display: block;
+      width: 100%;
+      padding: 0.5rem;
+      background: var(--bg);
+      border: 1px solid var(--primary);
+      border-radius: var(--radius);
+      color: var(--text);
+      margin-bottom: 1rem;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 0.6rem 1.2rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary {
+      background: var(--primary);
+    }
+
+    .progress-bar-wrap {
+      background: var(--bg);
+      border-radius: 999px;
+      overflow: hidden;
+      height: 8px;
+      margin-top: 0.75rem;
+      display: none;
+    }
+    .progress-bar-wrap.visible { display: block; }
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .badge-pending  { background: #444; color: #ccc; }
+    .badge-running  { background: #0f3460; color: #7ec8e3; }
+    .badge-complete { background: #1a5c2a; color: #7fffaa; }
+    .badge-failed   { background: #5c1a1a; color: #ff7f7f; }
+    .badge-started  { background: #0f3460; color: #7ec8e3; }
+
+    .recording-list { list-style: none; }
+    .recording-list li {
+      background: var(--bg);
+      border-radius: var(--radius);
+      padding: 0.75rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .recording-list .rec-name { font-size: 0.9rem; word-break: break-all; }
+    .recording-list .rec-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #222;
+      color: var(--text);
+      padding: 0.6rem 1.2rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    footer {
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <span style="font-size:1.6rem;">🎥</span>
+    <h1>Free<span>MoCap</span> Web</h1>
+  </header>
+
+  <main>
+    <!-- Upload section -->
+    <section id="upload-section">
+      <h2>Upload Video(s)</h2>
+      <div class="card">
+        <label for="video-input">Select one or more video files (.mp4, .avi, .mov, .mkv)</label>
+        <input type="file" id="video-input" accept="video/mp4,video/avi,video/quicktime,video/x-matroska,.mkv" multiple />
+        <button id="upload-btn" onclick="uploadVideos()">⬆️ Upload &amp; Create Recording</button>
+        <div class="progress-bar-wrap" id="upload-progress-wrap">
+          <div class="progress-bar" id="upload-progress-bar"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Recordings list -->
+    <section id="recordings-section">
+      <h2>Recordings <button class="secondary" style="font-size:0.8rem;padding:0.3rem 0.7rem;" onclick="loadRecordings()">🔄 Refresh</button></h2>
+      <div class="card">
+        <ul class="recording-list" id="recordings-list">
+          <li style="color:var(--muted);font-size:0.9rem;">Loading…</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast"></div>
+
+  <footer>FreeMoCap Web Companion &bull; Open-source motion capture</footer>
+
+  <script src="/static/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      });
+    }
+    loadRecordings();
+  </script>
+</body>
+</html>
